@@ -1,0 +1,25 @@
+# Environnement Python
+backend/venv/
+
+# Cache Python
+**/__pycache__/
+*.pyc
+
+# BLOG usine
+backend/data/input/*.xlsx
+backend/data/input/*.xls
+
+# PDF clients
+backend/data/input/*.pdf
+backend/data/input/*.PDF
+backend/data/uploads/*
+
+# BLOG générés
+backend/data/output/*
+
+# Variables sensibles
+.env
+
+!backend/data/input/.gitkeep
+!backend/data/output/.gitkeep
+!backend/data/uploads/.gitkeep
