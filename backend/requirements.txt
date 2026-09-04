@@ -2,3 +2,6 @@ streamlit
 openpyxl
 pypdf
 pywin32
+pytesseract
+pymupdf
+Pillow

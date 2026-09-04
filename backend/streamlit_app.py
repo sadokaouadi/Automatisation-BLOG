@@ -63,6 +63,37 @@ def format_number(value):
         return str(value)
 
 
+def clear_order_form_state():
+    """
+    Supprime les anciennes valeurs des champs Streamlit
+    avant une nouvelle extraction PDF.
+
+    Streamlit conserve les valeurs des widgets ayant la même clé.
+    Sans ce nettoyage, un nouveau PDF peut garder les anciennes
+    valeurs vides au lieu d'afficher les nouvelles données extraites.
+    """
+
+    prefixes = (
+        "customer_",
+        "po_",
+        "order_date_",
+        "customer_date_",
+        "product_",
+        "qty_",
+        "mt_",
+        "upc_"
+    )
+
+    keys_to_delete = [
+        key
+        for key in list(st.session_state.keys())
+        if key.startswith(prefixes)
+    ]
+
+    for key in keys_to_delete:
+        del st.session_state[key]
+
+
 # =========================================================
 # AFFICHAGE DE L'ALERTE STOCK RJ45
 # =========================================================
@@ -518,6 +549,11 @@ if uploaded_pdfs:
         "🔍 Extraire tous les PDF",
         type="primary"
     ):
+
+        # IMPORTANT :
+        # Réinitialiser les anciens champs avant d'afficher
+        # les données du nouveau lot de PDF.
+        clear_order_form_state()
 
         extracted_documents = []
 
