@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Base locale
+data/database/*.db
+
+# BLOG / fichiers usine
+data/imports/*.xlsx
+data/uploads/*
+data/exports/*
+
+# Secrets
+.env
+
+# IDE
+.vscode/
+.idea/
