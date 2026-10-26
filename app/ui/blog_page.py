@@ -1,3 +1,4 @@
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -5,11 +6,59 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QTableWidget,
     QTableWidgetItem,
-    QHeaderView
+    QHeaderView,
+    QMessageBox
 )
 
 from app.database.database import get_connection
+from app.ui.background_task import BackgroundTask
 from app.ui.order_details_dialog import OrderDetailsDialog
+
+
+def _fetch_orders(search):
+    connection = get_connection()
+
+    try:
+        cursor = connection.cursor()
+        if search:
+            value = f"%{search}%"
+            cursor.execute("""
+                SELECT
+                    id,
+                    date,
+                    customer_date,
+                    po,
+                    product,
+                    quantity,
+                    length,
+                    upc,
+                    status
+                FROM orders
+                WHERE
+                    po LIKE ?
+                    OR product LIKE ?
+                    OR upc LIKE ?
+                ORDER BY id DESC
+            """, (value, value, value))
+        else:
+            cursor.execute("""
+                SELECT
+                    id,
+                    date,
+                    customer_date,
+                    po,
+                    product,
+                    quantity,
+                    length,
+                    upc,
+                    status
+                FROM orders
+                ORDER BY id DESC
+            """)
+
+        return cursor.fetchall()
+    finally:
+        connection.close()
 
 
 class BlogPage(QWidget):
@@ -52,7 +101,7 @@ class BlogPage(QWidget):
         self.search_input.setMinimumHeight(40)
 
         self.search_input.textChanged.connect(
-            self.load_orders
+            self.schedule_search
         )
 
         self.layout.addWidget(self.search_input)
@@ -108,118 +157,96 @@ class BlogPage(QWidget):
         header = self.table.horizontalHeader()
 
         header.setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
+            QHeaderView.ResizeMode.Interactive
         )
 
-        # Produit = colonne 4
         header.setSectionResizeMode(
             4,
             QHeaderView.ResizeMode.Stretch
         )
 
-        # ==========================
-        # CHARGEMENT INITIAL
-        # ==========================
+        header.setSectionResizeMode(
+            0,
+            QHeaderView.ResizeMode.Fixed
+        )
+        self.table.setColumnWidth(0, 0)
 
-        self.load_orders()
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(300)
+        self._search_timer.timeout.connect(self.load_orders)
+        self._orders_worker = None
+        self._worker_search = None
+        self._loaded_search = None
 
     # ======================================================
-    # CHARGER LES COMMANDES
+    # RECHERCHE AVEC DELAI
+    # ======================================================
+
+    def schedule_search(self):
+        self._search_timer.start()
+
+    # ======================================================
+    # CHARGER LES COMMANDES EN ARRIERE-PLAN
     # ======================================================
 
     def load_orders(self):
-
         search = self.search_input.text().strip()
 
-        connection = get_connection()
-        cursor = connection.cursor()
+        if search == self._loaded_search:
+            return
 
-        # ==========================
-        # AVEC RECHERCHE
-        # ==========================
+        if self._orders_worker is not None:
+            return
 
-        if search:
-
-            value = f"%{search}%"
-
-            cursor.execute("""
-                SELECT
-                    id,
-                    date,
-                    customer_date,
-                    po,
-                    product,
-                    quantity,
-                    length,
-                    upc,
-                    status
-                FROM orders
-                WHERE
-                    po LIKE ?
-                    OR product LIKE ?
-                    OR upc LIKE ?
-                ORDER BY id DESC
-            """, (
-                value,
-                value,
-                value
-            ))
-
-        # ==========================
-        # SANS RECHERCHE
-        # ==========================
-
-        else:
-
-            cursor.execute("""
-                SELECT
-                    id,
-                    date,
-                    customer_date,
-                    po,
-                    product,
-                    quantity,
-                    length,
-                    upc,
-                    status
-                FROM orders
-                ORDER BY id DESC
-            """)
-
-        rows = cursor.fetchall()
-
-        connection.close()
-
-        # ==========================
-        # NOMBRE DE COMMANDES
-        # ==========================
-
-        self.count_label.setText(
-            f"{len(rows)} commande(s)"
+        self.count_label.setText("Chargement des commandes...")
+        self._worker_search = search
+        self._orders_worker = BackgroundTask(
+            lambda: _fetch_orders(search),
+            self
         )
+        self._orders_worker.succeeded.connect(self._on_orders_loaded)
+        self._orders_worker.failed.connect(self._on_orders_error)
+        self._orders_worker.finished.connect(self._on_orders_finished)
+        self._orders_worker.finished.connect(self._orders_worker.deleteLater)
+        self._orders_worker.start()
 
-        # ==========================
-        # REMPLIR LE TABLEAU
-        # ==========================
+    def _on_orders_loaded(self, rows):
+        if self._worker_search != self.search_input.text().strip():
+            return
 
-        self.table.setRowCount(len(rows))
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(len(rows))
+            for row_index, row_data in enumerate(rows):
+                for column_index, value in enumerate(row_data):
+                    item = QTableWidgetItem(
+                        "" if value is None else str(value)
+                    )
+                    self.table.setItem(row_index, column_index, item)
+        finally:
+            self.table.setUpdatesEnabled(True)
 
-        for row_index, row_data in enumerate(rows):
+        self._loaded_search = self._worker_search
+        self.count_label.setText(f"{len(rows)} commande(s)")
 
-            for column_index, value in enumerate(row_data):
+    def _on_orders_error(self, message):
+        if self._worker_search == self.search_input.text().strip():
+            self.count_label.setText("Impossible de charger les commandes")
+            QMessageBox.critical(
+                self,
+                "Erreur BLOG Digital",
+                message
+            )
 
-                if value is None:
-                    value = ""
+    def _on_orders_finished(self):
+        completed_search = self._worker_search
+        self._orders_worker = None
+        self._worker_search = None
 
-                item = QTableWidgetItem(
-                    str(value)
-                )
-
-                self.table.setItem(
-                    row_index,
-                    column_index,
-                    item
-                )
+        current_search = self.search_input.text().strip()
+        if current_search != completed_search:
+            self.load_orders()
 
     # ======================================================
     # OUVRIR DETAIL COMMANDE

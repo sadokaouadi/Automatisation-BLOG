@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from app.database.database import get_connection
-from app.services.rj45_stock_analyzer import analyze_rj45_stock
+from app.services.clients.commscope.rj45_stock_analyzer import analyze_rj45_stock
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
