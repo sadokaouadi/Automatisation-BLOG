@@ -1,0 +1,7 @@
+PyQt6>=6.6
+openpyxl>=3.1
+PyMuPDF>=1.23,<2.0
+pytesseract>=0.3.10
+Pillow>=10
+pypdf>=4
+pywin32>=306
